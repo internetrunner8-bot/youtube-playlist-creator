@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Playlist Creator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.95em;
+        }
+        
+        .auth-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+        
+        .status-indicator.connected {
+            background: #28a745;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 200px;
+        }
+        
+        .helper-text {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .privacy-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .privacy-toggle input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        
+        #result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        #result.success {
+            background: #d4edda;
+            border: 2px solid #28a745;
+            color: #155724;
+        }
+        
+        #result.error {
+            background: #f8d7da;
+            border: 2px solid #dc3545;
+            color: #721c24;
+        }
+        
+        .playlist-link {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            word-break: break-all;
+        }
+        
+        .playlist-link a {
+            color: #667eea;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        
+        .playlist-link a:hover {
+            text-decoration: underline;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .playlist-form {
+            display: none;
+        }
+        
+        .playlist-form.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 YouTube Playlist Creator</h1>
+        <p class="subtitle">Create YouTube playlists from bulk video links</p>
+        
+        <div class="auth-section">
+            <div class="status">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="statusText">Not connected to Google</span>
+            </div>
+            <button class="btn" id="authButton" onclick="handleAuth()">Sign in with Google</button>
+        </div>
+        
+        <div class="playlist-form" id="playlistForm">
+            <div class="form-group">
+                <label for="playlistName">Playlist Name *</label>
+                <input type="text" id="playlistName" placeholder="Enter playlist name" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="playlistDescription">Description (Optional)</label>
+                <input type="text" id="playlistDescription" placeholder="Enter playlist description">
+            </div>
+            
+            <div class="privacy-toggle">
+                <input type="checkbox" id="privatePlaylist">
+                <label for="privatePlaylist" style="margin: 0;">Make playlist private</label>
+            </div>
+            
+            <div class="form-group">
+                <label for="videoLinks">Video Links *</label>
+                <textarea id="videoLinks" placeholder="Paste YouTube video links here (one per line)&#10;&#10;Example:&#10;https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://youtu.be/dQw4w9WgXcQ&#10;https://www.youtube.com/watch?v=abc123"></textarea>
+                <div class="helper-text">Supports: youtube.com/watch?v=, youtu.be/, and YouTube Shorts links</div>
+            </div>
+            
+            <button class="btn" onclick="createPlaylist()" id="createBtn">Create Playlist</button>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Creating your playlist...</p>
+            </div>
+            
+            <div id="result"></div>
+        </div>
+    </div>
+
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+        let accessToken = null;
+        let tokenClient = null;
+        const CLIENT_ID = '239253385351-fhsu51bkg7po09up7rihbu739c80g647.apps.googleusercontent.com'; // Replace with your actual Client ID
+        const SCOPES = 'https://www.googleapis.com/auth/youtube.force-ssl';
+
+        // Initialize Google Sign-In
+        function initClient() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (response) => {
+                    if (response.access_token) {
+                        accessToken = response.access_token;
+                        updateAuthStatus(true);
+                    }
+                },
+            });
+        }
+
+        function handleAuth() {
+            if (CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
+                alert('Please configure your Google API Client ID first!\n\nReplace YOUR_CLIENT_ID_HERE in the code with your actual Client ID from Google Cloud Console.');
+                return;
+            }
+            
+            if (accessToken) {
+                // Sign out
+                accessToken = null;
+                updateAuthStatus(false);
+            } else {
+                // Sign in
+                tokenClient.requestAccessToken();
+            }
+        }
+
+        function updateAuthStatus(isConnected) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            const authButton = document.getElementById('authButton');
+            const playlistForm = document.getElementById('playlistForm');
+            
+            if (isConnected) {
+                indicator.classList.add('connected');
+                statusText.textContent = 'Connected to Google';
+                authButton.textContent = 'Sign Out';
+                playlistForm.classList.add('active');
+            } else {
+                indicator.classList.remove('connected');
+                statusText.textContent = 'Not connected to Google';
+                authButton.textContent = 'Sign in with Google';
+                playlistForm.classList.remove('active');
+            }
+        }
+
+        function extractVideoId(url) {
+            const patterns = [
+                /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+                /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+                /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/
+            ];
+            
+            for (const pattern of patterns) {
+                const match = url.match(pattern);
+                if (match) return match[1];
+            }
+            return null;
+        }
+
+        async function createPlaylist() {
+            const playlistName = document.getElementById('playlistName').value.trim();
+            const playlistDescription = document.getElementById('playlistDescription').value.trim();
+            const videoLinks = document.getElementById('videoLinks').value.trim();
+            const isPrivate = document.getElementById('privatePlaylist').checked;
+            const resultDiv = document.getElementById('result');
+            const loading = document.getElementById('loading');
+            const createBtn = document.getElementById('createBtn');
+
+            if (!playlistName) {
+                showResult('Please enter a playlist name', 'error');
+                return;
+            }
+
+            if (!videoLinks) {
+                showResult('Please enter at least one video link', 'error');
+                return;
+            }
+
+            const links = videoLinks.split('\n').filter(link => link.trim());
+            const videoIds = links.map(link => extractVideoId(link.trim())).filter(id => id);
+
+            if (videoIds.length === 0) {
+                showResult('No valid YouTube video links found. Please check your links.', 'error');
+                return;
+            }
+
+            createBtn.disabled = true;
+            loading.style.display = 'block';
+            resultDiv.style.display = 'none';
+
+            try {
+                // Create playlist
+                const playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        snippet: {
+                            title: playlistName,
+                            description: playlistDescription || 'Created with YouTube Playlist Creator',
+                        },
+                        status: {
+                            privacyStatus: isPrivate ? 'private' : 'public'
+                        }
+                    })
+                });
+
+                if (!playlistResponse.ok) {
+                    throw new Error('Failed to create playlist');
+                }
+
+                const playlistData = await playlistResponse.json();
+                const playlistId = playlistData.id;
+
+                // Add videos to playlist
+                let successCount = 0;
+                let failCount = 0;
+
+                for (const videoId of videoIds) {
+                    try {
+                        const addResponse = await fetch('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                snippet: {
+                                    playlistId: playlistId,
+                                    resourceId: {
+                                        kind: 'youtube#video',
+                                        videoId: videoId
+                                    }
+                                }
+                            })
+                        });
+
+                        if (addResponse.ok) {
+                            successCount++;
+                        } else {
+                            failCount++;
+                        }
+                    } catch (error) {
+                        failCount++;
+                    }
+                }
+
+                const playlistUrl = `https://www.youtube.com/playlist?list=${playlistId}`;
+                let message = `✅ Playlist created successfully!<br><br>`;
+                message += `📊 ${successCount} video(s) added successfully`;
+                if (failCount > 0) {
+                    message += `<br>⚠️ ${failCount} video(s) failed (may be private/deleted)`;
+                }
+                message += `<div class="playlist-link">🔗 <a href="${playlistUrl}" target="_blank">${playlistUrl}</a></div>`;
+
+                showResult(message, 'success');
+
+                // Clear form
+                document.getElementById('playlistName').value = '';
+                document.getElementById('playlistDescription').value = '';
+                document.getElementById('videoLinks').value = '';
+                document.getElementById('privatePlaylist').checked = false;
+
+            } catch (error) {
+                showResult('❌ Error creating playlist: ' + error.message, 'error');
+            } finally {
+                createBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        }
+
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = message;
+            resultDiv.className = type;
+            resultDiv.style.display = 'block';
+        }
+
+        // Initialize when page loads
+        window.onload = () => {
+            setTimeout(() => {
+                if (typeof google !== 'undefined') {
+                    initClient();
+                }
+            }, 500);
+        };
+    </script>
+</body>
+</html>
