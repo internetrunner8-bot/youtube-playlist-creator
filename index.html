@@ -604,6 +604,14 @@
             return null;
         }
 
+        async function refreshToken() {
+            return new Promise((resolve) => {
+                tokenClient.requestAccessToken({prompt: ''});
+                // Wait for the callback to update the token
+                setTimeout(() => resolve(), 1000);
+            });
+        }
+
         async function createPlaylist() {
             const playlistName = document.getElementById('playlistName').value.trim();
             const playlistDescription = document.getElementById('playlistDescription').value.trim();
@@ -636,7 +644,12 @@
             resultDiv.style.display = 'none';
 
             try {
-                const playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
+                // Try to refresh token before making the request
+                if (!accessToken) {
+                    throw new Error('Please sign in again.');
+                }
+
+                let playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${accessToken}`,
@@ -653,10 +666,32 @@
                     })
                 });
 
+                // If token expired, try to refresh and retry once
+                if (playlistResponse.status === 401) {
+                    await refreshToken();
+                    
+                    playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            snippet: {
+                                title: playlistName,
+                                description: playlistDescription || 'Created with YouTube Playlist Creator',
+                            },
+                            status: {
+                                privacyStatus: isPrivate ? 'private' : 'public'
+                            }
+                        })
+                    });
+                }
+
                 if (!playlistResponse.ok) {
                     const errorData = await playlistResponse.json();
                     if (playlistResponse.status === 401 || playlistResponse.status === 403) {
-                        throw new Error('Authentication expired. Please click "Switch Account" or sign out and sign in again.');
+                        throw new Error('Authentication failed. Please click "Switch Account" to sign in again with your account.');
                     }
                     throw new Error(errorData.error?.message || 'Failed to create playlist. Make sure you have granted YouTube permissions.');
                 }
