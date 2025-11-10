@@ -494,9 +494,11 @@
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
+                prompt: 'consent',
                 callback: async (response) => {
                     if (response.access_token) {
                         accessToken = response.access_token;
+                        console.log('Token received successfully');
                         await getUserInfo();
                         updateAuthStatus(true);
                     } else if (response.error) {
@@ -532,31 +534,29 @@
             
             if (accessToken) {
                 // Sign out
-                google.accounts.oauth2.revoke(accessToken, () => {
-                    accessToken = null;
-                    currentUserEmail = null;
-                    updateAuthStatus(false);
-                    showResult('✅ Signed out successfully.', 'success');
-                });
+                accessToken = null;
+                currentUserEmail = null;
+                updateAuthStatus(false);
+                showResult('✅ Signed out successfully. Please sign in with your account.', 'success');
             } else {
-                // Sign in - force account selection
-                tokenClient.requestAccessToken({prompt: 'select_account'});
+                // Sign in - ALWAYS force account selection and consent
+                tokenClient.requestAccessToken({
+                    prompt: 'consent select_account'
+                });
             }
         }
 
         function switchAccount() {
-            // Force sign out and show account picker
-            if (accessToken) {
-                google.accounts.oauth2.revoke(accessToken, () => {
-                    accessToken = null;
-                    currentUserEmail = null;
-                    updateAuthStatus(false);
-                    // Immediately show account picker
-                    setTimeout(() => {
-                        tokenClient.requestAccessToken({prompt: 'select_account'});
-                    }, 500);
+            // Force sign out and show account picker with consent
+            accessToken = null;
+            currentUserEmail = null;
+            updateAuthStatus(false);
+            // Immediately show account picker with forced consent
+            setTimeout(() => {
+                tokenClient.requestAccessToken({
+                    prompt: 'consent select_account'
                 });
-            }
+            }, 300);
         }
 
         function updateAuthStatus(isConnected) {
@@ -690,10 +690,19 @@
 
                 if (!playlistResponse.ok) {
                     const errorData = await playlistResponse.json();
+                    console.error('Playlist creation failed:', errorData);
+                    console.error('Status:', playlistResponse.status);
+                    console.error('Using email:', currentUserEmail);
+                    
                     if (playlistResponse.status === 401 || playlistResponse.status === 403) {
-                        throw new Error('Authentication failed. Please click "Switch Account" to sign in again with your account.');
+                        let errorMsg = 'Authentication failed. ';
+                        if (errorData.error?.message) {
+                            errorMsg += errorData.error.message + ' ';
+                        }
+                        errorMsg += 'Please try: 1) Click "Switch Account" 2) Select your Gmail 3) Grant ALL permissions (YouTube + Email)';
+                        throw new Error(errorMsg);
                     }
-                    throw new Error(errorData.error?.message || 'Failed to create playlist. Make sure you have granted YouTube permissions.');
+                    throw new Error(errorData.error?.message || 'Failed to create playlist. Error: ' + playlistResponse.status);
                 }
 
                 const playlistData = await playlistResponse.json();
