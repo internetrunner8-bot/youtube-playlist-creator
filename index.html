@@ -487,18 +487,16 @@
         let accessToken = null;
         let tokenClient = null;
         let currentUserEmail = null;
-        const CLIENT_ID = '989039518415-vvi3utgs3qckt6hs5ll3accus0jqgdrs.apps.googleusercontent.com';
+        const CLIENT_ID = '522368563433-mhebe0e5b4mcqueb2oeat0u8qpgnid2r.apps.googleusercontent.com';
         const SCOPES = 'https://www.googleapis.com/auth/youtube.force-ssl https://www.googleapis.com/auth/userinfo.email';
 
         function initClient() {
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
-                prompt: 'consent',
                 callback: async (response) => {
                     if (response.access_token) {
                         accessToken = response.access_token;
-                        console.log('Token received successfully');
                         await getUserInfo();
                         updateAuthStatus(true);
                     } else if (response.error) {
@@ -534,29 +532,31 @@
             
             if (accessToken) {
                 // Sign out
-                accessToken = null;
-                currentUserEmail = null;
-                updateAuthStatus(false);
-                showResult('✅ Signed out successfully. Please sign in with your account.', 'success');
-            } else {
-                // Sign in - ALWAYS force account selection and consent
-                tokenClient.requestAccessToken({
-                    prompt: 'consent select_account'
+                google.accounts.oauth2.revoke(accessToken, () => {
+                    accessToken = null;
+                    currentUserEmail = null;
+                    updateAuthStatus(false);
+                    showResult('✅ Signed out successfully.', 'success');
                 });
+            } else {
+                // Sign in - force account selection
+                tokenClient.requestAccessToken({prompt: 'select_account'});
             }
         }
 
         function switchAccount() {
-            // Force sign out and show account picker with consent
-            accessToken = null;
-            currentUserEmail = null;
-            updateAuthStatus(false);
-            // Immediately show account picker with forced consent
-            setTimeout(() => {
-                tokenClient.requestAccessToken({
-                    prompt: 'consent select_account'
+            // Force sign out and show account picker
+            if (accessToken) {
+                google.accounts.oauth2.revoke(accessToken, () => {
+                    accessToken = null;
+                    currentUserEmail = null;
+                    updateAuthStatus(false);
+                    // Immediately show account picker
+                    setTimeout(() => {
+                        tokenClient.requestAccessToken({prompt: 'select_account'});
+                    }, 500);
                 });
-            }, 300);
+            }
         }
 
         function updateAuthStatus(isConnected) {
@@ -604,14 +604,6 @@
             return null;
         }
 
-        async function refreshToken() {
-            return new Promise((resolve) => {
-                tokenClient.requestAccessToken({prompt: ''});
-                // Wait for the callback to update the token
-                setTimeout(() => resolve(), 1000);
-            });
-        }
-
         async function createPlaylist() {
             const playlistName = document.getElementById('playlistName').value.trim();
             const playlistDescription = document.getElementById('playlistDescription').value.trim();
@@ -644,12 +636,7 @@
             resultDiv.style.display = 'none';
 
             try {
-                // Try to refresh token before making the request
-                if (!accessToken) {
-                    throw new Error('Please sign in again.');
-                }
-
-                let playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
+                const playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${accessToken}`,
@@ -666,43 +653,12 @@
                     })
                 });
 
-                // If token expired, try to refresh and retry once
-                if (playlistResponse.status === 401) {
-                    await refreshToken();
-                    
-                    playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${accessToken}`,
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            snippet: {
-                                title: playlistName,
-                                description: playlistDescription || 'Created with YouTube Playlist Creator',
-                            },
-                            status: {
-                                privacyStatus: isPrivate ? 'private' : 'public'
-                            }
-                        })
-                    });
-                }
-
                 if (!playlistResponse.ok) {
                     const errorData = await playlistResponse.json();
-                    console.error('Playlist creation failed:', errorData);
-                    console.error('Status:', playlistResponse.status);
-                    console.error('Using email:', currentUserEmail);
-                    
                     if (playlistResponse.status === 401 || playlistResponse.status === 403) {
-                        let errorMsg = 'Authentication failed. ';
-                        if (errorData.error?.message) {
-                            errorMsg += errorData.error.message + ' ';
-                        }
-                        errorMsg += 'Please try: 1) Click "Switch Account" 2) Select your Gmail 3) Grant ALL permissions (YouTube + Email)';
-                        throw new Error(errorMsg);
+                        throw new Error('Authentication expired. Please click "Switch Account" or sign out and sign in again.');
                     }
-                    throw new Error(errorData.error?.message || 'Failed to create playlist. Error: ' + playlistResponse.status);
+                    throw new Error(errorData.error?.message || 'Failed to create playlist. Make sure you have granted YouTube permissions.');
                 }
 
                 const playlistData = await playlistResponse.json();
