@@ -794,13 +794,6 @@
             return null;
         }
 
-        async function refreshToken() {
-            return new Promise((resolve) => {
-                tokenClient.requestAccessToken({prompt: ''});
-                setTimeout(() => resolve(), 1000);
-            });
-        }
-
         async function createPlaylist() {
             const playlistName = document.getElementById('playlistName').value.trim();
             const playlistDescription = document.getElementById('playlistDescription').value.trim();
@@ -828,16 +821,17 @@
                 return;
             }
 
+            if (!accessToken) {
+                showResult('❌ Please sign in with your Google account first.', 'error');
+                return;
+            }
+
             createBtn.disabled = true;
             loading.style.display = 'block';
             resultDiv.style.display = 'none';
 
             try {
-                if (!accessToken) {
-                    throw new Error('Please sign in again.');
-                }
-
-                let playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
+                const playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${accessToken}`,
@@ -854,42 +848,19 @@
                     })
                 });
 
-                if (playlistResponse.status === 401) {
-                    await refreshToken();
-                    
-                    playlistResponse = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${accessToken}`,
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            snippet: {
-                                title: playlistName,
-                                description: playlistDescription || 'Created with YouTube Playlist Creator',
-                            },
-                            status: {
-                                privacyStatus: isPrivate ? 'private' : 'public'
-                            }
-                        })
-                    });
-                }
-
                 if (!playlistResponse.ok) {
                     const errorData = await playlistResponse.json();
                     console.error('Playlist creation failed:', errorData);
                     console.error('Status:', playlistResponse.status);
                     console.error('Using email:', currentUserEmail);
                     
-                    if (playlistResponse.status === 401 || playlistResponse.status === 403) {
-                        let errorMsg = 'Authentication failed. ';
-                        if (errorData.error?.message) {
-                            errorMsg += errorData.error.message + ' ';
-                        }
-                        errorMsg += 'Please try: 1) Click "Switch Account" 2) Select your Gmail 3) Grant ALL permissions (YouTube + Email)';
-                        throw new Error(errorMsg);
+                    let errorMsg = '❌ Failed to create playlist. ';
+                    if (errorData.error?.message) {
+                        errorMsg += errorData.error.message;
+                    } else {
+                        errorMsg += 'Error code: ' + playlistResponse.status;
                     }
-                    throw new Error(errorData.error?.message || 'Failed to create playlist. Error: ' + playlistResponse.status);
+                    throw new Error(errorMsg);
                 }
 
                 const playlistData = await playlistResponse.json();
